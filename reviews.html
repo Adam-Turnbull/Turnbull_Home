@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Diane Reviews — The Turnbull House</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --pine:#1e2b22;
+    --pine-dark:#162019;
+    --parchment:#f5efdf;
+    --parchment-deep:#ece3cc;
+    --amber:#c6862f;
+    --amber-deep:#a56c1f;
+    --ink:#23201a;
+    --white:#fffdf7;
+    --line: rgba(35,32,26,0.15);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Inter',sans-serif;
+    color:var(--ink);
+    background:var(--parchment);
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  .wrap{
+    max-width:760px;
+    margin:0 auto;
+    padding:56px 24px 80px;
+  }
+  .brand-mark{
+    width:30px;height:30px;
+    border:1.5px solid var(--amber);
+    border-radius:2px;
+    position:relative;
+    margin-bottom:22px;
+  }
+  .brand-mark::after{
+    content:"";
+    position:absolute;
+    left:50%;top:50%;
+    width:12px;height:12px;
+    border:1.5px solid var(--amber);
+    transform:translate(-50%,-50%) rotate(45deg);
+  }
+  h1{
+    font-family:'Fraunces',serif;
+    font-weight:500;
+    font-size:2rem;
+    line-height:1.15;
+    margin:0 0 8px 0;
+    letter-spacing:-0.01em;
+  }
+  p.lede{
+    font-size:0.96rem;
+    line-height:1.6;
+    color:rgba(35,32,26,0.6);
+    max-width:48ch;
+    margin:0 0 40px 0;
+  }
+  a.back{
+    display:inline-block;
+    font-size:0.82rem;
+    color:var(--amber-deep);
+    text-decoration:none;
+    margin-bottom:28px;
+  }
+  a.back:hover{text-decoration:underline;}
+
+  .review-list{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .review-card{
+    background:var(--white);
+    border:1.5px solid var(--line);
+    padding:18px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:16px;
+  }
+  .review-info .name{
+    font-family:'Fraunces',serif;
+    font-size:1.1rem;
+    margin-bottom:4px;
+  }
+  .review-info .meta{
+    font-size:0.8rem;
+    color:rgba(35,32,26,0.55);
+  }
+  .rank{
+    font-family:'Fraunces',serif;
+    font-size:1.3rem;
+    color:var(--amber-deep);
+    white-space:nowrap;
+    text-align:right;
+  }
+  .stars{
+    letter-spacing:1px;
+    font-size:1.1rem;
+  }
+
+  .empty-state{
+    border:1px dashed var(--line);
+    padding:32px 20px;
+    text-align:center;
+    color:rgba(35,32,26,0.55);
+    font-size:0.9rem;
+  }
+
+  .config-note{
+    margin-top:48px;
+    padding:16px 18px;
+    border:1px dashed var(--line);
+    font-size:0.82rem;
+    color:rgba(35,32,26,0.6);
+    line-height:1.6;
+  }
+  .config-note code{
+    background:var(--parchment-deep);
+    padding:1px 5px;
+    font-size:0.8em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← Back to booking</a>
+  <div class="brand-mark"></div>
+  <h1>Diane Reviews</h1>
+  <p class="lede">Guests who've stayed at The Turnbull House, ranked by average score from Diane. Only guests with at least one ranked stay are shown here.</p>
+
+  <div id="list" class="review-list">
+    <div class="empty-state">Loading…</div>
+  </div>
+
+  <div class="config-note" id="config-note" style="display:none;">
+    Reviews aren't loading. Make sure <code>SHEET_URL</code> below points at the same
+    Apps Script Web App URL used on the booking page, and that the <code>Bookings</code>
+    sheet has a <code>Rank</code> column filled in for the stays you want listed.
+  </div>
+</div>
+
+<script>
+(function(){
+  // ============ CONFIG ============
+  // Same Apps Script Web App URL as the booking page.
+  const SHEET_URL = "https://script.google.com/macros/s/AKfycbzoqE7gH2S6vQjsFaWoEjnFzmFnItz_qYTzX7W5_BEJA9D4_mUgsh4llLzBnsW-SORW5w/exec";
+  // =================================
+
+  const listEl = document.getElementById('list');
+
+  const pretty = ds => {
+    if(!ds) return '';
+    const [y,m,d] = ds.split('-').map(Number);
+    if(!y || !m || !d) return ds;
+    return new Date(y, m-1, d).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+  };
+
+  function starsFor(score){
+    if(!Number.isFinite(score) || score <= 0) return null;
+    const rounded = Math.max(1, Math.min(5, Math.round(score)));
+    return '★'.repeat(rounded) + '☆'.repeat(5 - rounded);
+  }
+
+  function aggregateByName(bookings){
+    const groups = new Map(); // lowercased name -> { displayName, total, count }
+
+    bookings.forEach(b=>{
+      const rawName = (b.name || '').trim();
+      if(!rawName) return;
+      const rankNum = Number(b.rank);
+      if(!Number.isFinite(rankNum)) return; // skip blank/non-numeric ranks
+
+      const key = rawName.toLowerCase();
+      if(!groups.has(key)){
+        groups.set(key, { displayName: rawName, total: 0, count: 0 });
+      }
+      const g = groups.get(key);
+      g.total += rankNum;
+      g.count += 1;
+    });
+
+    const people = Array.from(groups.values()).map(g=>{
+      const isAdam = g.displayName.toLowerCase() === 'adam';
+      const score = isAdam ? 5.1 : (g.total / g.count);
+      return { name: g.displayName, score, stays: g.count };
+    });
+
+    people.sort((a,b)=>{
+      if(b.score !== a.score) return b.score - a.score; // highest score first
+      return a.name.localeCompare(b.name); // tie -> alphabetical
+    });
+
+    return people;
+  }
+
+  function renderReviews(bookings){
+    const people = aggregateByName(bookings);
+
+    if(!people.length){
+      listEl.innerHTML = '<div class="empty-state">No ranked stays yet.</div>';
+      return;
+    }
+
+    listEl.innerHTML = '';
+    people.forEach(p=>{
+      const card = document.createElement('div');
+      card.className = 'review-card';
+
+      const info = document.createElement('div');
+      info.className = 'review-info';
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = p.name;
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.textContent = p.stays + (p.stays === 1 ? ' stay ranked' : ' stays ranked') + ' · avg ' + p.score.toFixed(1);
+      info.appendChild(name);
+      info.appendChild(meta);
+
+      const rankEl = document.createElement('div');
+      rankEl.className = 'rank';
+      const stars = starsFor(p.score);
+      if(stars){
+        rankEl.innerHTML = '<span class="stars">'+stars+'</span>';
+      } else {
+        rankEl.textContent = p.score.toFixed(1);
+      }
+
+      card.appendChild(info);
+      card.appendChild(rankEl);
+      listEl.appendChild(card);
+    });
+  }
+
+  async function loadReviews(){
+    if(!SHEET_URL || SHEET_URL.indexOf('PASTE_YOUR') === 0){
+      document.getElementById('config-note').style.display = 'block';
+      listEl.innerHTML = '<div class="empty-state">Reviews aren\'t connected yet.</div>';
+      return;
+    }
+    try{
+      const res = await fetch(SHEET_URL, {method:'GET'});
+      const data = await res.json();
+      renderReviews(data);
+    }catch(err){
+      document.getElementById('config-note').style.display = 'block';
+      listEl.innerHTML = '<div class="empty-state">Could not load reviews right now.</div>';
+    }
+  }
+
+  loadReviews();
+})();
+</script>
+</body>
+</html>
