@@ -177,8 +177,12 @@
     bookings.forEach(b=>{
       const rawName = (b.name || '').trim();
       if(!rawName) return;
-      const rankNum = Number(b.rank);
-      if(!Number.isFinite(rankNum)) return; // skip blank/non-numeric ranks
+      const rawRank = (b.rank === undefined || b.rank === null) ? '' : String(b.rank).trim();
+      // Only accept a single clean number (e.g. "5" or "3.5"). Anything with
+      // more than one number in it (e.g. "5 5", "5,3") is treated as bad data and skipped.
+      if(!/^-?\d+(\.\d+)?$/.test(rawRank)) return;
+      const rankNum = Number(rawRank);
+      if(!Number.isFinite(rankNum)) return;
 
       const key = rawName.toLowerCase();
       if(!groups.has(key)){
